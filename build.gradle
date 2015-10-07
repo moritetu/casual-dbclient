@@ -1,0 +1,143 @@
+apply plugin: 'java'
+apply plugin: 'eclipse'
+apply plugin: 'maven'
+
+defaultTasks 'clean', 'build'
+
+sourceCompatibility = targetCompatibility = 1.7
+version = '0.0.1'
+group = "com.github.moritoru81"
+
+// Encoding
+def defaultEncoding = 'UTF-8'
+
+//
+// Extended properties
+//
+project.ext {
+}
+
+jar {
+    manifest {
+        attributes 'Implementation-Title': 'Casual DBClient', 'Implementation-Version': version
+    }
+
+    exclude '*.properties'
+}
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+
+    maven {
+        // cloudera
+        url "https://repository.cloudera.com/artifactory/cloudera-repos/"
+    }
+
+    maven {
+        url "https://code.lds.org/nexus/content/groups/main-repo"
+    }
+}
+
+configurations {
+    deployerJars
+}
+
+dependencies {
+    compile group: 'commons-configuration', name: 'commons-configuration', version: '1.10'
+    compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.+'
+
+    // JDBC
+    // http://www.oracle.com/technetwork/database/features/jdbc/jdbc-drivers-12c-download-1958347.html
+    runtime group: 'com.oracle', name: 'ojdbc7', version: '12.1.0.1'
+    runtime group: 'mysql', name: 'mysql-connector-java', version: '5.1.+'
+    runtime group: 'org.xerial', name: 'sqlite-jdbc', version: '3.8.11.+'
+    // Hive
+    // see https://cwiki.apache.org/confluence/display/Hive/HiveClient
+    runtime group: 'org.apache.hive' , name: 'hive-jdbc', version: "1.2.+"
+    runtime group: 'org.apache.hadoop', name: 'hadoop-common', version: '2.7.+'
+    runtime group: 'org.apache.hadoop', name: 'hadoop-core', version: '1.2.1'
+
+    // test
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+    testCompile group: 'org.mockito', name: 'mockito-all', version: '1.10.+'
+}
+
+[compileJava, compileTestJava].each {
+    it.options.encoding = defaultEncoding
+    // https://blogs.oracle.com/darcy/entry/bootclasspath_older_source
+    it.options.compilerArgs += [
+        '-source', project.sourceCompatibility, 
+        '-target', project.targetCompatibility,
+        '-Xlint:-options'
+    ]
+}
+
+javadoc {
+    options.encoding = defaultEncoding
+}
+
+//
+// Generate pom
+//
+// gradle -q genpom
+//
+task genpom << {
+    pom {
+        groupId = project.group
+    }.writeTo("$projectDir/pom.xml")
+}
+
+//
+// Copies dependencies to the ./lib directory.
+//
+task copyDependencies << {
+    println ':copy depend to lib'
+    new File('lib').mkdirs()
+    copy {
+        from configurations.runtime
+        into 'lib'
+    }
+}
+
+
+// Create a jar for sources
+//
+// @see 
+// http://www.gradle.org/docs/current/dsl/org.gradle.api.tasks.javadoc.Javadoc.html
+// http://www.gradle.org/docs/current/dsl/org.gradle.api.tasks.bundling.Jar.html#org.gradle.api.tasks.bundling.Jar:classifier 
+task sourcesJar(type: Jar, dependsOn: classes) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+// Create a jar for javadoc
+task javadocJar(type: Jar, dependsOn: javadoc) {
+    classifier = 'javadoc'
+    from javadoc.destinationDir
+}
+
+//
+// Create a tar.gz archive which include library, sources and javadoc jar.
+//
+task tarArchiveJars(type: Tar, dependsOn: [sourcesJar, javadocJar]) {
+    compression = Compression.GZIP 
+    extension = "tar.gz"
+    from("$libsDir") {
+        include("**/*.jar")
+    }
+    from(processResources.destinationDir) {
+        include("**/*")
+    }
+}
+
+artifacts {
+    archives sourcesJar
+    archives javadocJar
+}
+
+eclipse {
+    classpath {
+       downloadSources=true
+    }
+}
