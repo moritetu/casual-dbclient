@@ -1,0 +1,11 @@
+*.class
+*.log
+build/
+.gradle/
+lib/
+
+# Eclipse resources
+.classpath
+.settings
+.project
+/bin/
